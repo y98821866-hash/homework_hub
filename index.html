@@ -487,16 +487,17 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // Firebase Config
+    // Your web app's Firebase configuration
     const firebaseConfig = {
-      apiKey: "AIzaSyDemoKeyForPublicHomeworkHubApp2026",
-      authDomain: "homework-hub-3a.firebaseapp.com",
-      projectId: "homework-hub-3a",
-      storageBucket: "homework-hub-3a.appspot.com",
-      messagingSenderId: "123456789012",
-      appId: "1:123456789012:web:abcdef123456"
+      apiKey: "AIzaSyC8gYKhm8-vloRGiYDf1HgZRu1BLtHDWVY",
+      authDomain: "homework-hub-2b81a.firebaseapp.com",
+      projectId: "homework-hub-2b81a",
+      storageBucket: "homework-hub-2b81a.firebasestorage.app",
+      messagingSenderId: "512621868903",
+      appId: "1:512621868903:web:0445be003161146ef1a1c2"
     };
 
+    // Initialize Firebase and Firestore
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
