@@ -523,12 +523,31 @@
     let allUsers = [];
 
     // 2. Realtime Listener for Homeworks
-    onSnapshot(collection(db, "homeworks"), (snapshot) => {
-      allHomeworks = [];
-      snapshot.forEach((doc) => {
-        allHomeworks.push({ id: doc.id, ...doc.data() });
-      });
+    onSnapshot(collection(db, "homeworks"), async (snapshot) => {
+      const rawHomeworks = [];
+      const now = new Date();
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+   snapshot.forEach((docSnap) => {
+     const data = docSnap.data();
+     const dueDateStr = data.dueDate; // 格式如 "2026-10-27"
+
+     if (dueDateStr) {
+       const dueDateParts = dueDateStr.split('-');
+       const dueDateTime = new Date(dueDateParts[0], dueDateParts[1] - 1, dueDateParts[2]);
+       const deleteAfterTime = new Date(dueDateTime.getTime() + 24 * 60 * 60 * 1000); // 截止日期次日
+
+       // 如果到达或超过截止日期次日，自动从云端删除
+       if (todayMidnight >= deleteAfterTime) {
+         deleteDoc(doc(db, "homeworks", docSnap.id)).catch(err => console.error("Auto delete expired HW error:", err));
+         return;
+       }
+     }
+
+     rawHomeworks.push({ id: docSnap.id, ...data });
+   });
+
+   allHomeworks = rawHomeworks;
       // Strict Sorting: Primary by Due Date (Earliest first), Secondary by Subject
       allHomeworks.sort((a, b) => {
         const dateA = a.dueDate ? new Date(a.dueDate) : new Date('9999-12-31');
@@ -580,7 +599,7 @@
       }
     }
 
-    // Render Homework List
+// Render Homework List
     function renderHomeworks() {
       const container = document.getElementById('homeworkContainer');
       if (allHomeworks.length === 0) {
@@ -593,27 +612,41 @@
       }
 
       container.innerHTML = `<div class="homework-list">` + 
-        allHomeworks.map(hw => `
-          <div class="homework-item">
-            <div>
-              <span class="hw-subject">${escapeHtml(hw.subject)}</span>
-              <div class="hw-title">${escapeHtml(hw.title)}</div>
-              <div class="hw-meta">📅 截止: ${hw.dueDate || '未设定'}</div>
-              <div class="hw-author">👤 由 ${escapeHtml(hw.authorName)} 上载</div>
+        allHomeworks.map(hw => {
+          // 获取当前作者名字
+          const authorUser = allUsers.find(u => u.id === hw.authorId);
+          const currentName = authorUser ? authorUser.name : hw.authorName;
+          
+          // 如果是 Test 且超过 5 天未上载，上载者显示为“未知”
+          const displayAuthor = isTestUserExpired(hw.authorId, currentName, allHomeworks) ? '未知' : currentName;
+
+          return `
+            <div class="homework-item">
+              <div>
+                <span class="hw-subject">${escapeHtml(hw.subject)}</span>
+                <div class="hw-title">${escapeHtml(hw.title)}</div>
+                <div class="hw-meta">📅 截止: ${hw.dueDate || '未设定'}</div>
+                <div class="hw-author">👤 由 ${escapeHtml(displayAuthor)} 上载</div>
+              </div>
+              ${hw.authorId === deviceId ? `
+                <button class="delete-btn" onclick="deleteHomework('${hw.id}')">🗑️</button>
+              ` : ''}
             </div>
-            ${hw.authorId === deviceId ? `
-              <button class="delete-btn" onclick="deleteHomework('${hw.id}')">🗑️</button>
-            ` : ''}
-          </div>
-        `).join('') + `</div>`;
+          `;
+        }).join('') + `</div>`;
     }
 
-    // Render Leaderboard List
+// Render Leaderboard List
     function renderLeaderboard() {
       const listEl = document.getElementById('leaderboardList');
       
-      // Sort users by points descending
-      const sortedUsers = [...allUsers].sort((a, b) => (b.pts || 0) - (a.pts || 0));
+      // 过滤掉超过 5 天未上载功课的 Test 用户，并按积分降序排序
+      const sortedUsers = [...allUsers].filter(u => {
+        if (isTestUserExpired(u.id, u.name, allHomeworks)) {
+          return false; // 从排行榜中清除
+        }
+        return true;
+      }).sort((a, b) => (b.pts || 0) - (a.pts || 0));
 
       if (sortedUsers.length === 0) {
         listEl.innerHTML = `<div style="text-align:center; color:#9CA3AF; font-size:13px;">暂无排行榜数据</div>`;
@@ -712,6 +745,24 @@
       const pad = (n) => n.toString().padStart(2, '0');
       document.getElementById('countdownDisplay').innerText = 
         `${pad(days)}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+    }
+// 检查 Test 用户是否超过 5 天未上载功课
+    function isTestUserExpired(authorId, currentName, allHws) {
+      if (currentName !== 'Test') return false;
+      const authorHws = allHws.filter(h => h.authorId === authorId);
+      if (authorHws.length === 0) return false;
+      
+      let latestTime = 0;
+      authorHws.forEach(h => {
+        if (h.createdAt && h.createdAt.toDate) {
+          const t = h.createdAt.toDate().getTime();
+          if (t > latestTime) latestTime = t;
+        }
+      });
+      
+      if (latestTime === 0) return false;
+      const fiveDaysMs = 5 * 24 * 60 * 60 * 1000; // 5 天的毫秒数
+      return (Date.now() - latestTime) > fiveDaysMs;
     }
 
     setInterval(updateTimer, 1000);
